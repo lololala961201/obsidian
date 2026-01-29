@@ -12,6 +12,12 @@
     taskRe=/^(\s*)-\s\[( |x|X)\]\s(.*)$/,
     IS_TOUCH=!!matchMedia?.("(hover: none) and (pointer: coarse)")?.matches,
     $=(s,r=c)=>r.querySelector(s);
+  const trimTaskText=t=>String(t??"").replace(/\s+$/g,"");
+  const parseTaskLine=line=>{
+    const m=(line||"").match(taskRe); if(!m) return null;
+    return {indent:m[1], box:m[2], checked:/x/i.test(m[2]), text:m[3]};
+  };
+  const isSearchActive=()=>String(searchQ||"").trim()!=="";
 
   c.innerHTML=`<div class="dvnow">
     <div class="dvnow-top"><div class="dvcal">
@@ -71,19 +77,20 @@
 
   let path="",file=null,header="",dSel=new Date();
 
-  const bounds=L=>{
-    const s=L.findIndex(l=>l.trim()===header); if(s<0) return null;
+  const findSectionBounds=(L,hdr)=>{
+    const s=L.findIndex(l=>l.trim()===hdr); if(s<0) return null;
     for(let i=s+1;i<L.length;i++) if(/^#\s+/.test(L[i])) return {s,e:i};
     return {s,e:L.length};
   };
+  const bounds=L=>findSectionBounds(L,header);
   const proc=fn=>file?app.vault.process(file,t=>fn(t)):null;
   const setChk=(i,on)=>proc(t=>{
-    const L=t.split("\n"), line=L[i]||"", m=line.match(taskRe); if(!m) return t;
-    L[i]=`${m[1]}- [${on?"x":" "}] ${m[3].replace(/\s+$/g,"")}`; return L.join("\n");
+    const L=t.split("\n"), line=L[i]||"", m=parseTaskLine(line); if(!m) return t;
+    L[i]=`${m.indent}- [${on?"x":" "}] ${trimTaskText(m.text)}`; return L.join("\n");
   });
   const setTxt=(i,tx)=>proc(t=>{
-    const L=t.split("\n"), m=(L[i]||"").match(taskRe); if(!m) return t;
-    L[i]=`${m[1]}- [${m[2]}] ${(tx??"").replace(/\s+$/g,"")}`; return L.join("\n");
+    const L=t.split("\n"), m=parseTaskLine(L[i]); if(!m) return t;
+    L[i]=`${m.indent}- [${m.box}] ${trimTaskText(tx)}`; return L.join("\n");
   });
   const del=i=>proc(t=>{const L=t.split("\n"); if(i<0||i>=L.length) return t; L.splice(i,1); return L.join("\n");});
   const dup=i=>proc(t=>{const L=t.split("\n"), line=L[i]||""; if(!taskRe.test(line)) return t; L.splice(i+1,0,line); return L.join("\n");});
@@ -96,7 +103,7 @@
     const seg=L.slice(b.s+1,b.e), by=new Map(), extras=[];
     seg.forEach((line,off)=>{
       const abs=b.s+1+off;
-      if(taskRe.test(line||"")) by.set(`t:${abs}`, line);
+      if(parseTaskLine(line)) by.set(`t:${abs}`, line);
       else if((line||"").trim()!=="") extras.push(line);
     });
     const built=[];
@@ -108,11 +115,6 @@
   });
 
   const headerForDate=dt=>`# ${dn[dt.getDay()]} ${md(dt)}`;
-  const findSectionBounds=(L,hdr)=>{
-    const s=L.findIndex(l=>l.trim()===hdr); if(s<0) return null;
-    for(let i=s+1;i<L.length;i++) if(/^#\s+/.test(L[i])) return {s,e:i};
-    return {s,e:L.length};
-  };
 
   const TINT_FILE="개인/시스템/dvnow-task-tints.json";
   let tintDB=null, tintWriteT=0;
@@ -168,8 +170,8 @@
     const t=await app.vault.read(file), L=t.split("\n"), b=bounds(L); if(!b) return [];
     const raw=[];
     for(let i=b.s+1;i<b.e;i++){
-      const m=(L[i]||"").match(taskRe); if(!m) continue;
-      raw.push({i, chk:/x/i.test(m[2]), txt:m[3], ind:m[1]});
+      const m=parseTaskLine(L[i]); if(!m) continue;
+      raw.push({i, chk:m.checked, txt:m.text, ind:m.indent});
     }
     const seen=new Map();
     raw.forEach(r=>{
@@ -181,7 +183,7 @@
 
   let searchQ="", hideChecked=false, selectMode=false, editingId=null, outsideHandler=null, editTA=null, hotScope=null;
   let dateOutside=null, dateEsc=null;
-  let listEls=[], listKeys=[], rects=null, ins=null, raf=0, pending=null;
+  let listEls=[], listKeys=[], rects=null, ins=null, raf=0, pending=null, visRows=null;
   let rowById=new Map(), selSet=new Set(), searchInput=null, infoEl=null, hideBtn=null;
 
   const isMod=e=>!!(e&&(e.metaKey||e.ctrlKey));
@@ -208,10 +210,17 @@
 
   const marker=document.createElement("div"); marker.className="drop-marker";
   const clearMarker=()=>{marker.parentNode&&marker.remove(); ins=null;};
-  const cache=()=>{rects=listEls.filter(r=>r.style.display!=="none").map(r=>r.getBoundingClientRect());};
+  const getVisibleRows=()=>{
+    visRows ??= listEls.filter(r=>r.style.display!=="none");
+    return visRows;
+  };
+  const cache=()=>{
+    const vis=getVisibleRows();
+    rects=vis.map(r=>r.getBoundingClientRect());
+  };
   const EDGE=34;
   const idxFromY=y=>{
-    const vis=listEls.filter(r=>r.style.display!=="none");
+    const vis=getVisibleRows();
     if(!rects?.length) return null;
     const f=rects[0], l=rects[rects.length-1];
     if(y<=f.top+EDGE) return 0;
@@ -225,16 +234,16 @@
     return null;
   };
   const place=i=>{
-    const vis=listEls.filter(r=>r.style.display!=="none");
+    const vis=getVisibleRows();
     i=Math.max(0,Math.min(vis.length,i));
     marker.parentNode||host.appendChild(marker);
 
     const hr=host.getBoundingClientRect();
     if(i>=vis.length){
       if(!vis.length){ marker.style.top="0px"; ins=0; return; }
-      const last=vis[vis.length-1].getBoundingClientRect();
-      marker.style.top=(last.bottom-hr.top)+"px"; ins=i; return;
-    }
+    const last=vis[vis.length-1].getBoundingClientRect();
+    marker.style.top=(last.bottom-hr.top)+"px"; ins=i; return;
+  }
     const rr=vis[i].getBoundingClientRect();
     marker.style.top=(rr.top-hr.top)+"px"; ins=i;
   };
@@ -263,6 +272,7 @@
       row.style.display=ok?"":"none";
       ok&&shown++;
     }
+    visRows=null;
     hideBtn&&(hideBtn.textContent = hideChecked ? "Show" : "Hide");
     if(infoEl && !selSet.size){
       if(q) infoEl.textContent=`Found ${shown}`;
@@ -272,7 +282,7 @@
   };
 
   const moveGroup=async(insertIndex,grp)=>{
-    if(String(searchQ||"").trim()) return;
+    if(isSearchActive()) return;
     const order=listKeys.slice(), moving=(grp&&grp.length)?grp.slice():[];
     if(!moving.length) return;
 
@@ -321,13 +331,13 @@
     await app.vault.process(targetFile,(txt)=>{
       const L=txt.split("\n");
       const b=findSectionBounds(L,targetHeader);
-      const makeLine=t=>`${t.ind||""}- [${t.chk?"x":" "}] ${String(t.txt||"").replace(/\s+$/g,"")}`;
+      const makeLine=t=>`${t.ind||""}- [${t.chk?"x":" "}] ${trimTaskText(t.txt)}`;
 
       const counts=new Map();
       const scanFrom=b?(b.s+1):0, scanTo=b?b.e:L.length;
       for(let i=scanFrom;i<scanTo;i++){
-        const m=(L[i]||"").match(taskRe); if(!m) continue;
-        const k=norm(m[3]); counts.set(k,(counts.get(k)||0)+1);
+        const m=parseTaskLine(L[i]); if(!m) continue;
+        const k=norm(m.text); counts.set(k,(counts.get(k)||0)+1);
       }
       for(const t of moving){
         const k=norm(t.txt), base=counts.get(k)||0, inc=(movedOcc.get(k)||0)+1;
@@ -358,7 +368,7 @@
   let blockTouchMove=null;
   const cancelPress=()=>{ touch.pressT&&clearTimeout(touch.pressT); touch.pressT=0; touch.pressedRow=null; };
   const startTouchDrag=(rowEl,y)=>{
-    if(String(searchQ||"").trim()) return;
+    if(isSearchActive()) return;
     touch.on=true; touch.row=rowEl; touch.fired=true;
     wrap.classList.add("dvnow-dragging");
     rowEl.style.webkitUserSelect="none"; rowEl.style.userSelect="none";
@@ -462,7 +472,7 @@
     let drag=null, dragGroup=null;
 
     host.addEventListener("dragover",e=>{
-      if(!drag || String(searchQ||"").trim()) return;
+      if(!drag || isSearchActive()) return;
       e.preventDefault(); try{e.dataTransfer.dropEffect="move"}catch{}
       pending=e; if(raf) return;
       raf=requestAnimationFrame(()=>{
@@ -474,7 +484,7 @@
     },true);
 
     host.addEventListener("drop",e=>keep(async()=>{
-      if(!drag || String(searchQ||"").trim()) return;
+      if(!drag || isSearchActive()) return;
       e.preventDefault();
       if(ins==null) return clearMarker();
       await moveGroup(ins,(dragGroup&&dragGroup.length)?dragGroup:[drag]);
@@ -487,7 +497,7 @@
     host._dvrowBind=row=>{
       row.addEventListener("dragstart",e=>{
         if(IS_TOUCH) return;
-        if(String(searchQ||"").trim()) return e.preventDefault();
+        if(isSearchActive()) return e.preventDefault();
         if(String(editingId)===String(row.dataset.id)||e.target?.closest?.("textarea")) return e.preventDefault();
 
         drag=row.dataset.id;
@@ -514,7 +524,7 @@
       host.dataset.touchBound="1";
 
       host.addEventListener("pointerdown",(e)=>{
-        if(e.pointerType!=="touch" || String(searchQ||"").trim()) return;
+        if(e.pointerType!=="touch" || isSearchActive()) return;
         const rowEl=e.target?.closest?.(".row");
         if(!rowEl || rowEl.classList.contains("editing")) return;
         if(!rowEl.dataset.id?.startsWith("t:")) return;
@@ -558,7 +568,7 @@
     clearOutside(); popScope();
     const items=await read();
 
-    host.innerHTML=""; listEls=[]; listKeys=[]; rects=null; ins=null; rowById=new Map();
+    host.innerHTML=""; listEls=[]; listKeys=[]; rects=null; ins=null; visRows=null; rowById=new Map();
 
     const tb=document.createElement("div"); tb.className="toolbar";
     const r1=document.createElement("div"); r1.className="toolrow";
@@ -598,6 +608,10 @@
 
     const pop=document.createElement("div");
     pop.className="datepop";
+    pop.style.bottom="calc(100% + 8px)";
+    pop.style.position="fixed";
+    pop.style.left="0";
+    pop.style.top="0";
 
     let pY=dSel.getFullYear(), pM=dSel.getMonth();
     const isOpen=()=>pop.classList.contains("show");
@@ -689,10 +703,38 @@
       pop.append(head,w,g);
     };
 
+    const positionDatePop=()=>{
+      const wrapRect=dateWrap.getBoundingClientRect();
+      const viewportH=window.innerHeight||document.documentElement.clientHeight||0;
+      const viewportW=window.innerWidth||document.documentElement.clientWidth||0;
+      const margin=12;
+      const gap=8;
+      const spaceAbove=wrapRect.top-margin;
+      const spaceBelow=viewportH-wrapRect.bottom-margin;
+      const preferBelow=spaceBelow>spaceAbove;
+      const maxHeight=Math.max(140, Math.min(viewportH-margin*2, preferBelow?spaceBelow:spaceAbove));
+      pop.style.maxHeight=`${Math.floor(maxHeight)}px`;
+      const rect=pop.getBoundingClientRect();
+      const popWidth=Math.min(rect.width, viewportW-margin*2);
+      pop.style.width=`${Math.floor(popWidth)}px`;
+      const alignedLeft=Math.min(
+        Math.max(margin, wrapRect.left),
+        viewportW-margin-popWidth
+      );
+      const top=preferBelow
+        ? Math.min(viewportH-margin-pop.offsetHeight, wrapRect.bottom+gap)
+        : Math.max(margin, wrapRect.top-gap-pop.offsetHeight);
+      pop.style.left=`${Math.floor(alignedLeft)}px`;
+      pop.style.top=`${Math.floor(top)}px`;
+      pop.style.right="auto";
+      pop.style.bottom="auto";
+    };
+
     const open=()=>{
       if(!file) return;
       pop.classList.add("show");
       paint();
+      requestAnimationFrame(positionDatePop);
 
       if(!dateOutside){
         dateOutside=e=>{
