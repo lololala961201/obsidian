@@ -695,8 +695,10 @@
       paint();
       const btnRect=dateBtn.getBoundingClientRect();
       const popRect=pop.getBoundingClientRect();
-      let top=btnRect.top-popRect.height-8;
-      if(top<16) top=btnRect.bottom+8;
+      let top=btnRect.bottom+8;
+      if(top+popRect.height>window.innerHeight-16){
+        top=btnRect.top-popRect.height-8;
+      }
       pop.style.top=`${top}px`;
 
       if(!dateOutside){
