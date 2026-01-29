@@ -609,6 +609,7 @@
     const pop=document.createElement("div");
     pop.className="datepop";
     pop.style.bottom="calc(100% + 8px)";
+    pop.style.left="0";
 
     let pY=dSel.getFullYear(), pM=dSel.getMonth();
     const isOpen=()=>pop.classList.contains("show");
@@ -718,12 +719,13 @@
         pop.style.bottom="calc(100% + 8px)";
       }
       const rect=pop.getBoundingClientRect();
-      if(rect.right>viewportW-margin){
-        const shift=Math.min(0, viewportW-margin-rect.right);
-        pop.style.transform=`translateX(${Math.floor(shift)}px)`;
-      } else {
-        pop.style.transform="";
-      }
+      const overRight=rect.right-(viewportW-margin);
+      const overLeft=(margin-rect.left);
+      let shift=0;
+      if(overRight>0) shift-=overRight;
+      if(overLeft>0) shift+=overLeft;
+      if(shift) pop.style.transform=`translateX(${Math.floor(shift)}px)`;
+      else pop.style.transform="";
     };
 
     const open=()=>{
