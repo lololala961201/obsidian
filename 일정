@@ -4,7 +4,7 @@
 
   const Y=2026, FS=14, c=dv.container,
     z=n=>String(n).padStart(2,"0"),
-    dn=["일요일","월요일","화요일","화요일","목요일","금요일","토요일"],
+    dn=["일요일","월요일","화요일","수요일","목요일","금요일","토요일"],
     wk=["월","화","수","목","금","토","일"],
     mn=["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"],
     md=d=>`${z(d.getMonth()+1)}.${z(d.getDate())}`,
@@ -77,14 +77,19 @@
     return {s,e:L.length};
   };
   const proc=fn=>file?app.vault.process(file,t=>fn(t)):null;
-  const setChk=(i,on)=>proc(t=>{
-    const L=t.split("\n"), line=L[i]||"", m=line.match(taskRe); if(!m) return t;
-    L[i]=`${m[1]}- [${on?"x":" "}] ${m[3].replace(/\s+$/g,"")}`; return L.join("\n");
+  const trimTaskText=tx=>(tx??"").replace(/\s+$/g,"");
+  const formatTaskLine=(indent,chk,txt)=>`${indent}- [${chk?"x":" "}] ${trimTaskText(txt)}`;
+  const updateTaskLine=(i,updater)=>proc(t=>{
+    const L=t.split("\n");
+    if(i<0||i>=L.length) return t;
+    const line=L[i]||"", m=line.match(taskRe);
+    if(!m) return t;
+    const next=updater({line,match:m});
+    if(next==null||next===line) return t;
+    L[i]=next; return L.join("\n");
   });
-  const setTxt=(i,tx)=>proc(t=>{
-    const L=t.split("\n"), m=(L[i]||"").match(taskRe); if(!m) return t;
-    L[i]=`${m[1]}- [${m[2]}] ${(tx??"").replace(/\s+$/g,"")}`; return L.join("\n");
-  });
+  const setChk=(i,on)=>updateTaskLine(i,({match:m})=>formatTaskLine(m[1],on,m[3]));
+  const setTxt=(i,tx)=>updateTaskLine(i,({match:m})=>`${m[1]}- [${m[2]}] ${trimTaskText(tx)}`);
   const del=i=>proc(t=>{const L=t.split("\n"); if(i<0||i>=L.length) return t; L.splice(i,1); return L.join("\n");});
   const dup=i=>proc(t=>{const L=t.split("\n"), line=L[i]||""; if(!taskRe.test(line)) return t; L.splice(i+1,0,line); return L.join("\n");});
   const addTop=()=>proc(t=>{
