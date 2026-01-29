@@ -695,10 +695,10 @@
       paint();
       const btnRect=dateBtn.getBoundingClientRect();
       const popRect=pop.getBoundingClientRect();
-      const calRect=cal.getBoundingClientRect();
       const minLeft=popRect.width/2+8;
       const maxLeft=window.innerWidth-popRect.width/2-8;
-      const centerLeft=calRect.left+calRect.width/2;
+      const dateRect=dateWrap.getBoundingClientRect();
+      const centerLeft=dateRect.left+dateRect.width/2;
       const left=Math.min(Math.max(centerLeft,minLeft),maxLeft);
       let top=btnRect.bottom+8;
       if(top+popRect.height>window.innerHeight-16){
