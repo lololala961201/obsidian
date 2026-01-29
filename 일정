@@ -1,0 +1,939 @@
+(async () => {
+  const F_WORK="업무/캘린더(2026)", F_PERSONAL="개인/캘린더(2026)";
+  let F=F_WORK;
+
+  const Y=2026, FS=14, c=dv.container,
+    z=n=>String(n).padStart(2,"0"),
+    dn=["일요일","월요일","화요일","화요일","목요일","금요일","토요일"],
+    wk=["월","화","수","목","금","토","일"],
+    mn=["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"],
+    md=d=>`${z(d.getMonth()+1)}.${z(d.getDate())}`,
+    ymd=d=>`${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`,
+    taskRe=/^(\s*)-\s\[( |x|X)\]\s(.*)$/,
+    IS_TOUCH=!!matchMedia?.("(hover: none) and (pointer: coarse)")?.matches,
+    $=(s,r=c)=>r.querySelector(s);
+
+  c.innerHTML=`<div class="dvnow">
+    <div class="dvnow-top"><div class="dvcal">
+      <div class="dvcal-h">
+        <div class="dvcal-titlewrap">
+          <div class="dvcal-t"></div>
+          <div class="dvcal-nav">
+            <button class="dvcal-b" data-nav="-1" type="button">‹</button>
+            <button class="dvcal-b" data-nav="1" type="button">›</button>
+          </div>
+        </div>
+        <div class="dvcal-right">
+          <button class="dvcal-reload" type="button" title="Reload">↻</button>
+          <button class="dvcal-today" type="button">TODAY</button>
+        </div>
+      </div>
+      <div class="dvcal-w"></div><div class="dvcal-g" role="grid"></div>
+    </div></div>
+    <div class="dvnow-body"><div class="dvnow-loading">Loading…</div></div>
+  </div>`;
+
+  const wrap=$(".dvnow"), host=$(".dvnow-body"),
+    cal=$(".dvcal"), title=$(".dvcal-t",cal),
+    weekRow=$(".dvcal-w",cal), grid=$(".dvcal-g",cal),
+    todayBtn=$(".dvcal-today",cal), reloadBtn=$(".dvcal-reload",cal);
+
+  wrap.style.setProperty("--fs",FS+"px");
+  weekRow.innerHTML=wk.map(x=>`<div>${x}</div>`).join("");
+
+  const scr=c.closest(".markdown-preview-view")||c.closest(".cm-scroller")||document.scrollingElement;
+  const keep=fn=>{const t=scr?.scrollTop||0;return Promise.resolve(fn()).finally(()=>requestAnimationFrame(()=>scr&&(scr.scrollTop=t)));};
+
+  {
+    const id="dvnow-css"; let s=document.getElementById(id);
+    if(!s){s=document.createElement("style");s.id=id;document.head.appendChild(s);}
+    s.textContent=`.dvnow{position:relative;--fs:15px;--dv-red-ink:color-mix(in srgb,#cf5353 80%,var(--text-normal));--dv-red-bg:color-mix(in srgb,#cf5353 12%,rgba(255,255,255,.03));--dv-blue-ink:color-mix(in srgb,#6bb3ff 78%,var(--text-normal));--dv-blue-bg:color-mix(in srgb,#6bb3ff 12%,rgba(255,255,255,.03));--dv-pink-ink:color-mix(in srgb,#ff2fa6 85%,var(--text-normal));--dv-pink-bg:color-mix(in srgb,#ff2fa6 18%,rgba(255,255,255,.03));--dv-ink-strong:color-mix(in srgb,var(--text-normal) 92%,white);--dv-ink-soft:color-mix(in srgb,var(--text-muted) 82%,white);--dv-brd:color-mix(in srgb,var(--background-modifier-border) 74%,transparent);--dv-brd-2:color-mix(in srgb,var(--background-modifier-border) 56%,transparent);--dv-surface:color-mix(in srgb,var(--background-primary) 92%,rgba(255,255,255,.03));--dv-surface-2:rgba(255,255,255,.03);--dv-hover:rgba(255,255,255,.06);--dv-press:rgba(255,255,255,.085);--ry:rgba(255,244,191,.92);--rg:rgba(204,244,220,.90);--rt:rgba(16,24,24,.95);--rb:rgba(16,24,24,.16)}.dvnow-top{display:flex;justify-content:flex-start;margin:2px 0 18px}.dvnow-body{width:min(360px,100%);position:relative;padding-bottom:56px}.dvcal{border:1px solid var(--dv-brd);border-radius:6px;padding:10px 10px 8px;max-width:360px;width:min(360px,100%);background:var(--dv-surface)}.dvcal-h{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 2px 8px;margin-bottom:8px;border-bottom:1px solid var(--dv-brd)}.dvcal-titlewrap{display:flex;align-items:center;gap:8px;min-width:0}.dvcal-t{font-size:12px;letter-spacing:.5px;text-transform:uppercase;font-weight:800;color:var(--dv-ink-strong);white-space:nowrap}.dvcal-nav{display:flex;gap:6px}.dvcal-right{display:flex;gap:6px;align-items:center}.dvcal-b,.dvcal-today,.dvcal-reload{height:26px;border:1px solid var(--dv-brd-2);border-radius:6px;background:var(--dv-surface-2);cursor:pointer;color:var(--dv-ink-strong);font-size:12px;line-height:1;font-weight:800;letter-spacing:.2px;transition:background .10s ease,border-color .10s ease,transform .08s ease;-webkit-appearance:none;appearance:none}.dvcal-b{width:28px}.dvcal-reload{width:28px}.dvcal-today{padding:0 10px}.dvcal-b:hover,.dvcal-today:hover,.dvcal-reload:hover{background:var(--dv-hover);border-color:color-mix(in srgb,var(--dv-brd) 70%,rgba(255,255,255,.10))}.dvcal-b:active,.dvcal-today:active,.dvcal-reload:active{background:var(--dv-press);transform:translateY(1px)}.dvcal-w{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px}.dvcal-w div{font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;font-weight:800;color:var(--dv-ink-soft);text-align:center;padding:2px 0 3px;opacity:.85}.dvcal-w div.wknd{color:color-mix(in srgb,var(--dv-blue-ink) 88%,var(--dv-ink-soft));opacity:1}.dvcal-g{display:grid;grid-template-columns:repeat(7,1fr);border:1px solid var(--dv-brd);border-radius:6px;overflow:hidden;background:rgba(255,255,255,.02)}.dvcal-d{position:relative;height:28px;border:0;border-right:1px solid var(--dv-brd-2);border-bottom:1px solid var(--dv-brd-2);background:transparent;cursor:pointer;font-size:12px;font-weight:650;font-variant-numeric:tabular-nums;color:var(--dv-ink-strong);transition:background .10s ease,color .10s ease;touch-action:manipulation}.dvcal-g .dvcal-d:nth-child(7n){border-right:0}.dvcal-g .dvcal-d:nth-last-child(-n+7){border-bottom:0}.dvcal-d:hover{background:var(--dv-hover)}.dvcal-d:active{background:var(--dv-press)}.dvcal-d.off{opacity:.18;cursor:default}.dvcal-d.wknd{color:var(--dv-blue-ink);background:rgba(107,179,255,.03)}.dvcal-d.wknd:hover{background:color-mix(in srgb,var(--dv-blue-bg) 55%,var(--dv-hover))}.dvcal-d.wknd:active{background:color-mix(in srgb,var(--dv-blue-bg) 65%,var(--dv-press))}.dvcal-d.today{background:rgba(255,255,255,.03)}.dvcal-d.today::after{content:"";position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:2px;background:var(--dv-red-ink);opacity:.95}.dvcal-d.sel{background:color-mix(in srgb,var(--dv-red-bg) 78%,rgba(255,255,255,.02));outline:1px solid color-mix(in srgb,var(--dv-red-ink) 55%,transparent);outline-offset:-1px}.dvnow .row{display:flex;gap:8px;align-items:flex-start;margin:6px 0;padding:6px 8px;border:1px solid var(--background-modifier-border);border-radius:6px;background:var(--background-primary)}.dvnow .row[draggable="true"]{cursor:grab}.dvnow .row.dragging{opacity:.45}.dvnow .row.editing{cursor:auto}.dvnow .cb{margin-top:2px;transform:scale(1.05)}.dvnow .txt{flex:1;min-width:0;font-size:var(--fs)!important;line-height:1.4!important;word-break:break-word;background:transparent!important;padding:0!important}.dvnow .txt p{margin:0}.dvnow .done .txt{opacity:.7}.dvnow .btns{display:flex;gap:6px;margin-left:4px;align-items:flex-start}.dvnow .b{width:26px;height:22px;border:1px solid var(--background-modifier-border);border-radius:6px;background:transparent;cursor:pointer;opacity:.85;line-height:1;font-size:12px;font-weight:800}.dvnow textarea{width:100%;font-size:var(--fs)!important;line-height:1.4!important;border:1px solid var(--background-modifier-border);border-radius:6px;padding:6px 8px;background:var(--background-primary);resize:vertical;user-select:text;-webkit-user-select:text}.dvnow a{text-decoration:underline}.dvnow .row.ty,.dvnow .row.t1{background:var(--ry);border-color:#000;border-width:2px}.dvnow .row.tg{background:var(--rg);border-color:var(--rb)}.dvnow .row.ty *,.dvnow .row.t1 *,.dvnow .row.tg *{color:var(--rt)}.dvnow .row.ty textarea,.dvnow .row.t1 textarea,.dvnow .row.tg textarea{background:rgba(255,255,255,.42);border-color:rgba(16,24,24,.18);color:var(--rt)}.dvnow .row.ty .b,.dvnow .row.t1 .b,.dvnow .row.tg .b{border-color:rgba(16,24,24,.16);background:rgba(255,255,255,.22)}.dvnow .chip{width:12px;height:22px;border-radius:6px;border:1px solid rgba(255,255,255,.12);background:transparent;cursor:pointer;opacity:.92;margin-top:0;padding:0}.dvnow .chip:hover{opacity:1}.dvnow .row.ty .chip,.dvnow .row.t1 .chip,.dvnow .row.tg .chip{border-color:rgba(16,24,24,.18)}.dvnow .chip.y{background:linear-gradient(180deg,rgba(255,244,191,.95),rgba(255,235,160,.92))}.dvnow .chip.g{background:linear-gradient(180deg,rgba(204,244,220,.92),rgba(176,236,204,.90))}.dvnow .chip.on{outline:2px solid rgba(255,255,255,.18)}.dvnow .row.ty .chip.on,.dvnow .row.t1 .chip.on,.dvnow .row.tg .chip.on{outline-color:rgba(16,24,24,.16)}.dvnow .drop-marker{position:absolute;left:0;right:0;height:0;border-top:2px solid color-mix(in srgb,var(--dv-red-ink) 85%,white);pointer-events:none;z-index:10}.dvnow-loading{font-size:12px;opacity:.6;padding:6px 2px}.dvnow .toolbar{display:flex;flex-direction:column;gap:8px;align-items:stretch;margin:0 0 8px}.dvnow .toolrow{display:flex;gap:6px;align-items:center;justify-content:flex-start}.dvnow .tbtn{height:26px;padding:0 10px;border:1px solid var(--background-modifier-border);border-radius:6px;background:rgba(255,255,255,.03);cursor:pointer;font-size:12px;font-weight:800;letter-spacing:.2px;opacity:.88;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}.dvnow .tbtn:hover{opacity:1}.dvnow .tbtn[disabled]{opacity:.35;cursor:default}.dvnow .tinfo{font-size:12px;opacity:.65;margin-left:2px}.dvnow .tbtn.mode-personal,.dvnow .tbtn.mode-work{background:color-mix(in srgb,var(--dv-pink-bg) 92%,rgba(255,255,255,.03));border-color:color-mix(in srgb,var(--dv-pink-ink) 40%,var(--background-modifier-border));color:var(--dv-ink-strong);box-shadow:0 0 0 1px color-mix(in srgb,var(--dv-pink-ink) 22%,transparent) inset}.dvnow .searchwrap{width:min(360px,100%);border:1px solid var(--background-modifier-border);border-radius:8px;background:var(--background-primary);padding:6px 10px;display:flex;align-items:center;gap:8px}.dvnow .searchicon{font-size:14px;opacity:.55;line-height:1;display:inline-flex;align-items:center;justify-content:center}.dvnow .searchin{border:0;outline:0;background:transparent;width:100%;font-size:14px;line-height:1.2;padding:0;color:var(--text-normal)}.dvnow .searchin::placeholder{opacity:.5}.dvnow .row.picked{border-color:color-mix(in srgb,var(--dv-red-ink) 62%,var(--background-modifier-border));background:color-mix(in srgb,var(--dv-red-bg) 52%,var(--background-primary))}.dvnow .row:not(.editing),.dvnow .row:not(.editing) *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}.dvnow .row.editing,.dvnow .row.editing *{-webkit-user-select:text;user-select:text}.dvnow.dvnow-dragging,.dvnow.dvnow-dragging *{-webkit-user-select:none !important;user-select:none !important;-webkit-touch-callout:none !important}.dvnow.dvnow-dragging textarea{-webkit-user-select:text !important;user-select:text !important}.dvnow .datewrap{position:relative;display:inline-flex;align-items:center;gap:6px}.dvnow .datepop{position:absolute;bottom:calc(100% + 8px);left:0;z-index:9999;display:none;flex-direction:column;gap:8px;padding:8px 10px;border:1px solid var(--background-modifier-border);border-radius:8px;background:var(--background-primary);box-shadow:0 10px 24px rgba(0,0,0,.25);overflow:auto;max-width:min(360px,calc(100vw - 16px));max-height:min(320px,calc(100vh - 120px))}.dvnow .datepop.show{display:flex}.dvnow .datehint{font-size:12px;opacity:.65;white-space:nowrap}`;
+  }
+
+  let MarkdownRenderer=null,Component=null,Scope=null;
+  try{({MarkdownRenderer,Component,Scope}=require("obsidian"))}catch{}
+  const mdComp=Component?new Component():null;
+  const renderMd=async(src,el)=>{el.innerHTML="";MarkdownRenderer&&mdComp?await MarkdownRenderer.render(app,src??"",el,path||"",mdComp):el.textContent=src??"";};
+  const bindLinkOpen=el=>el.addEventListener("click",e=>{
+    const a=e.target?.closest?.("a.internal-link"); if(!a) return;
+    const href=a.dataset?.href||a.getAttribute("href"); if(!href) return;
+    e.preventDefault(); app.workspace.openLinkText(href,path||"",true);
+  },true);
+
+  const rng=n=>{
+    const m=n.match(/^(\d{2})\.(\d{2})~(\d{2})\.(\d{2})/); if(!m) return null;
+    const a=new Date(Y,+m[1]-1,+m[2]), b=new Date(Y+(+m[3]<+m[1]),+m[3]-1,+m[4]);
+    return {s:ymd(a),e:ymd(b)};
+  };
+  let pages=[];
+  const refreshPages=()=>pages=dv.pages(`"${F}"`).where(x=>/^\d{2}\.\d{2}~/.test(x.file.name)).array();
+  const pickWeekNote=key=>pages.find(x=>{const r=rng(x.file.name);return r&&key>=r.s&&key<=r.e;})?.file?.path||"";
+
+  let path="",file=null,header="",dSel=new Date();
+
+  const bounds=L=>{
+    const s=L.findIndex(l=>l.trim()===header); if(s<0) return null;
+    for(let i=s+1;i<L.length;i++) if(/^#\s+/.test(L[i])) return {s,e:i};
+    return {s,e:L.length};
+  };
+  const proc=fn=>file?app.vault.process(file,t=>fn(t)):null;
+  const setChk=(i,on)=>proc(t=>{
+    const L=t.split("\n"), line=L[i]||"", m=line.match(taskRe); if(!m) return t;
+    L[i]=`${m[1]}- [${on?"x":" "}] ${m[3].replace(/\s+$/g,"")}`; return L.join("\n");
+  });
+  const setTxt=(i,tx)=>proc(t=>{
+    const L=t.split("\n"), m=(L[i]||"").match(taskRe); if(!m) return t;
+    L[i]=`${m[1]}- [${m[2]}] ${(tx??"").replace(/\s+$/g,"")}`; return L.join("\n");
+  });
+  const del=i=>proc(t=>{const L=t.split("\n"); if(i<0||i>=L.length) return t; L.splice(i,1); return L.join("\n");});
+  const dup=i=>proc(t=>{const L=t.split("\n"), line=L[i]||""; if(!taskRe.test(line)) return t; L.splice(i+1,0,line); return L.join("\n");});
+  const addTop=()=>proc(t=>{
+    const L=t.split("\n"), b=bounds(L); if(!b) return t;
+    L.splice(b.s+1,0,`- [ ] 새 태스크`); return L.join("\n");
+  });
+  const reordKeys=orderKeys=>proc(t=>{
+    const L=t.split("\n"), b=bounds(L); if(!b) return t;
+    const seg=L.slice(b.s+1,b.e), by=new Map(), extras=[];
+    seg.forEach((line,off)=>{
+      const abs=b.s+1+off;
+      if(taskRe.test(line||"")) by.set(`t:${abs}`, line);
+      else if((line||"").trim()!=="") extras.push(line);
+    });
+    const built=[];
+    orderKeys.forEach(k=>{const v=by.get(k); v!=null&&built.push(v);});
+    for(const [k,v] of by) orderKeys.includes(k)||built.push(v);
+    extras.length&&built.push("",...extras);
+    L.splice(b.s+1,b.e-(b.s+1),...built);
+    return L.join("\n");
+  });
+
+  const headerForDate=dt=>`# ${dn[dt.getDay()]} ${md(dt)}`;
+  const findSectionBounds=(L,hdr)=>{
+    const s=L.findIndex(l=>l.trim()===hdr); if(s<0) return null;
+    for(let i=s+1;i<L.length;i++) if(/^#\s+/.test(L[i])) return {s,e:i};
+    return {s,e:L.length};
+  };
+
+  const TINT_FILE="개인/시스템/dvnow-task-tints.json";
+  let tintDB=null, tintWriteT=0;
+  const safeParse=j=>{try{return JSON.parse(j||"{}")||{}}catch{return {}}};
+  const ensureFolder=async(fp)=>{
+    const parts=fp.split("/"); parts.pop();
+    let cur="";
+    for(const p of parts){
+      cur=cur?`${cur}/${p}`:p;
+      try{ if(!(await app.vault.adapter.exists(cur))) await app.vault.createFolder(cur); }catch{}
+    }
+  };
+  const loadTintDB=async()=>{
+    if(tintDB) return tintDB;
+    try{
+      if(!(await app.vault.adapter.exists(TINT_FILE))){
+        await ensureFolder(TINT_FILE);
+        await app.vault.adapter.write(TINT_FILE,"{}");
+      }
+      tintDB=safeParse(await app.vault.adapter.read(TINT_FILE));
+    }catch{ tintDB={}; }
+    return tintDB;
+  };
+  const queueTintWrite=()=>{
+    tintWriteT&&clearTimeout(tintWriteT);
+    tintWriteT=setTimeout(async()=>{
+      tintWriteT=0;
+      try{await ensureFolder(TINT_FILE);await app.vault.adapter.write(TINT_FILE, JSON.stringify(tintDB||{}, null, 2));}catch{}
+    },220);
+  };
+  const norm=s=>String(s??"").replace(/\s+/g," ").trim();
+  const tKey=(p,h,txt,occ)=>`${p}||${h}||${norm(txt)}##${occ}`;
+  const gKey=txt=>`g||${norm(txt)}`;
+  const getTint2=async(key,txt)=>{const db=await loadTintDB(); return db[key]||db[gKey(txt)]||"";};
+  const setTint2=async(key,v,txt)=>{
+    const db=await loadTintDB();
+    v?(db[key]=v,db[gKey(txt)]=v):(delete db[key],delete db[gKey(txt)]);
+    queueTintWrite();
+  };
+  const moveTintKey=async(fromKey,toKey)=>{
+    if(fromKey===toKey) return;
+    const db=await loadTintDB();
+    if(!(fromKey in db)) return;
+    (toKey in db)||(db[toKey]=db[fromKey]);
+    delete db[fromKey];
+    queueTintWrite();
+  };
+
+  const openSource=()=>path && app.workspace.openLinkText(path,"",true);
+
+  const read=async()=>{
+    if(!file) return [];
+    const t=await app.vault.read(file), L=t.split("\n"), b=bounds(L); if(!b) return [];
+    const raw=[];
+    for(let i=b.s+1;i<b.e;i++){
+      const m=(L[i]||"").match(taskRe); if(!m) continue;
+      raw.push({i, chk:/x/i.test(m[2]), txt:m[3], ind:m[1]});
+    }
+    const seen=new Map();
+    raw.forEach(r=>{
+      const k=norm(r.txt), n=(seen.get(k)||0)+1; seen.set(k,n);
+      r.occ=n; r.k=tKey(path,header,r.txt,r.occ); r.id=`t:${r.i}`;
+    });
+    return raw;
+  };
+
+  let searchQ="", hideChecked=false, selectMode=false, editingId=null, outsideHandler=null, editTA=null, hotScope=null;
+  let dateOutside=null, dateEsc=null;
+  let listEls=[], listKeys=[], rects=null, ins=null, raf=0, pending=null;
+  let rowById=new Map(), selSet=new Set(), searchInput=null, infoEl=null, hideBtn=null;
+
+  const isMod=e=>!!(e&&(e.metaKey||e.ctrlKey));
+  const popScope=()=>{ hotScope&&(app.keymap.popScope(hotScope),hotScope=null); };
+  const clearOutside=()=>{
+    outsideHandler&&(document.removeEventListener("pointerdown",outsideHandler,true),outsideHandler=null);
+    dateOutside&&(document.removeEventListener("pointerdown",dateOutside,true),dateOutside=null);
+    dateEsc&&(document.removeEventListener("keydown",dateEsc,true),dateEsc=null);
+  };
+
+  const clearSel=()=>{
+    if(!selSet.size) return;
+    selSet.clear();
+    listEls.forEach(r=>r.classList.remove("picked"));
+    infoEl&&(infoEl.textContent="");
+  };
+  const syncSelUI=()=>{
+    listEls.forEach(r=>{
+      const id=r.dataset.id;
+      r.classList.toggle("picked",!!id&&selSet.has(id));
+    });
+    infoEl&&(infoEl.textContent="");
+  };
+
+  const marker=document.createElement("div"); marker.className="drop-marker";
+  const clearMarker=()=>{marker.parentNode&&marker.remove(); ins=null;};
+  const cache=()=>{rects=listEls.filter(r=>r.style.display!=="none").map(r=>r.getBoundingClientRect());};
+  const EDGE=34;
+  const idxFromY=y=>{
+    const vis=listEls.filter(r=>r.style.display!=="none");
+    if(!rects?.length) return null;
+    const f=rects[0], l=rects[rects.length-1];
+    if(y<=f.top+EDGE) return 0;
+    if(y>=l.bottom-EDGE) return vis.length;
+    if(y<f.top||y>l.bottom) return null;
+    for(let i=0;i<rects.length;i++){
+      const r=rects[i];
+      if(y<r.top) return i;
+      if(y<=r.bottom) return i+(y>(r.top+r.height/2)?1:0);
+    }
+    return null;
+  };
+  const place=i=>{
+    const vis=listEls.filter(r=>r.style.display!=="none");
+    i=Math.max(0,Math.min(vis.length,i));
+    marker.parentNode||host.appendChild(marker);
+
+    const hr=host.getBoundingClientRect();
+    if(i>=vis.length){
+      if(!vis.length){ marker.style.top="0px"; ins=0; return; }
+      const last=vis[vis.length-1].getBoundingClientRect();
+      marker.style.top=(last.bottom-hr.top)+"px"; ins=i; return;
+    }
+    const rr=vis[i].getBoundingClientRect();
+    marker.style.top=(rr.top-hr.top)+"px"; ins=i;
+  };
+
+  const markTopPending=()=>{
+    listEls.forEach(r=>r.classList.remove("t1"));
+    const top=listEls.find(r=>{
+      if(r.style.display==="none") return false;
+      if(!(r.dataset?.id||"").startsWith("t:")) return false;
+      if(r.dataset?.chk!=="0") return false;
+      if(r.classList.contains("editing")||r.classList.contains("tg")) return false;
+      return true;
+    });
+    top && top.classList.add("t1");
+  };
+
+  const applyFilter=()=>{
+    const q=String(searchQ||"").trim().toLowerCase();
+    let shown=0;
+    for(const row of listEls){
+      const id=row?.dataset?.id||"";
+      if(!id.startsWith("t:")) continue;
+      const t=(row.dataset?.txt||"").toLowerCase();
+      const isDone=row.dataset?.chk==="1";
+      const ok=(!q||t.includes(q)) && (!hideChecked||!isDone);
+      row.style.display=ok?"":"none";
+      ok&&shown++;
+    }
+    hideBtn&&(hideBtn.textContent = hideChecked ? "Show" : "Hide");
+    if(infoEl && !selSet.size){
+      if(q) infoEl.textContent=`Found ${shown}`;
+      else infoEl.textContent="";
+    }
+    markTopPending();
+  };
+
+  const moveGroup=async(insertIndex,grp)=>{
+    if(String(searchQ||"").trim()) return;
+    const order=listKeys.slice(), moving=(grp&&grp.length)?grp.slice():[];
+    if(!moving.length) return;
+
+    let insertAt=insertIndex;
+    if(hideChecked){
+      let checkedCount=0;
+      for(const k of order){const r=rowById.get(k); r?.dataset.chk==="1"&&checkedCount++;}
+      insertAt += checkedCount;
+    }
+    const removedBefore=order.slice(0,insertAt).filter(k=>moving.includes(k)).length;
+    insertAt=Math.max(0,insertAt-removedBefore);
+
+    const remaining=order.filter(k=>!moving.includes(k));
+    insertAt=Math.max(0,Math.min(remaining.length,insertAt));
+    remaining.splice(insertAt,0,...moving);
+
+    await reordKeys(remaining);
+    clearSel();
+  };
+
+  const moveTasksToDate = async (dateStr) => {
+    const ids=[...selSet].filter(x=>String(x||"").startsWith("t:"));
+    if(!ids.length){infoEl&&(infoEl.textContent="Select task(s) first");return;}
+    const dt=new Date(dateStr); if(isNaN(+dt)) return; dt.setHours(0,0,0,0);
+
+    const targetHeader=headerForDate(dt);
+    const targetKey=ymd(dt);
+    const targetPath=pickWeekNote(targetKey);
+    if(!targetPath){infoEl&&(infoEl.textContent="No week note for that date");return;}
+    const targetFile=app.vault.getAbstractFileByPath(targetPath);
+    if(!targetFile){infoEl&&(infoEl.textContent="Target file not found");return;}
+
+    const items=await read();
+    const byId=new Map(items.map(x=>[x.id,x]));
+    const moving=ids.map(id=>byId.get(id)).filter(Boolean);
+    if(!moving.length) return;
+
+    const removeIdx=new Set(moving.map(t=>t.i));
+    await app.vault.process(file,(txt)=>{
+      const L=txt.split("\n"), sorted=[...removeIdx].sort((a,b)=>b-a);
+      for(const i of sorted) (i>=0&&i<L.length)&&L.splice(i,1);
+      return L.join("\n");
+    });
+
+    const movedOcc=new Map();
+    await app.vault.process(targetFile,(txt)=>{
+      const L=txt.split("\n");
+      const b=findSectionBounds(L,targetHeader);
+      const makeLine=t=>`${t.ind||""}- [${t.chk?"x":" "}] ${String(t.txt||"").replace(/\s+$/g,"")}`;
+
+      const counts=new Map();
+      const scanFrom=b?(b.s+1):0, scanTo=b?b.e:L.length;
+      for(let i=scanFrom;i<scanTo;i++){
+        const m=(L[i]||"").match(taskRe); if(!m) continue;
+        const k=norm(m[3]); counts.set(k,(counts.get(k)||0)+1);
+      }
+      for(const t of moving){
+        const k=norm(t.txt), base=counts.get(k)||0, inc=(movedOcc.get(k)||0)+1;
+        movedOcc.set(k,inc); t._newOcc=base+inc;
+      }
+
+      const linesToInsert=moving.map(makeLine);
+      if(!b){
+        L.length&&L[L.length-1].trim()!==""&&L.push("");
+        L.push(targetHeader,...linesToInsert);
+        return L.join("\n");
+      }
+      L.splice(b.s+1,0,...linesToInsert);
+      return L.join("\n");
+    });
+
+    for(const t of moving){
+      await moveTintKey(t.k, tKey(targetPath,targetHeader,t.txt??"",t._newOcc||1));
+    }
+
+    clearSel();
+    infoEl&&(infoEl.textContent=`Moved ${moving.length}`);
+    await loadForDate(dt);
+    renderCal();
+  };
+
+  const touch={on:false,pressT:0,pressedRow:null,fired:false,group:null,row:null,lastI:null};
+  let blockTouchMove=null;
+  const cancelPress=()=>{ touch.pressT&&clearTimeout(touch.pressT); touch.pressT=0; touch.pressedRow=null; };
+  const startTouchDrag=(rowEl,y)=>{
+    if(String(searchQ||"").trim()) return;
+    touch.on=true; touch.row=rowEl; touch.fired=true;
+    wrap.classList.add("dvnow-dragging");
+    rowEl.style.webkitUserSelect="none"; rowEl.style.userSelect="none";
+
+    if(!blockTouchMove){
+      blockTouchMove=ev=>{ if(touch.on) ev.preventDefault(); };
+      document.addEventListener("touchmove", blockTouchMove, {passive:false, capture:true});
+    }
+
+    const id=rowEl.dataset.id;
+    touch.group = selSet.has(id) ? listKeys.filter(x=>selSet.has(x)) : [id];
+    selSet.size && !selSet.has(id) && clearSel();
+    if(!selSet.size){ selSet.add(id); syncSelUI(); }
+
+    cache(); rowEl.classList.add("dragging");
+    document.body.style.overscrollBehavior="none"; host.style.touchAction="none";
+
+    const i=idxFromY(y); if(i==null){ clearMarker(); touch.lastI=null; return; }
+    place(i); touch.lastI=i;
+    try{navigator.vibrate?.(10)}catch{}
+  };
+  const stopTouchDrag=async()=>{
+    if(!touch.on) return;
+    const targetIndex=ins;
+    touch.on=false;
+
+    wrap.classList.remove("dvnow-dragging");
+    if(touch.row){ touch.row.style.webkitUserSelect=""; touch.row.style.userSelect=""; }
+
+    if(blockTouchMove){
+      document.removeEventListener("touchmove", blockTouchMove, {capture:true});
+      blockTouchMove=null;
+    }
+
+    document.body.style.overscrollBehavior=""; host.style.touchAction="";
+    touch.row?.classList.remove("dragging"); touch.row=null;
+
+    if(targetIndex==null){ clearMarker(); touch.group=null; return; }
+    await keep(async()=>{ await moveGroup(targetIndex,touch.group); clearMarker(); touch.group=null; await render(); });
+  };
+
+  const isUrlLike=s=>/^(https?:\/\/|obsidian:\/\/|mailto:)/i.test(String(s||"").trim());
+  const isWikiLink=s=>/^\[\[[\s\S]+\]\]$/.test(String(s||"").trim());
+  const smartPasteLink=(ta,link,mode)=>{
+    const v=ta.value??""; let a=ta.selectionStart??0,b=ta.selectionEnd??0; if(b<a){const t=a;a=b;b=t}
+    if(a===b) return false;
+    const sel=v.slice(a,b);
+    const out=mode==="wiki"
+      ? (()=>{const inner=String(link).trim().slice(2,-2).trim(); const target=(inner.split("|")[0]||"").trim(); return target?`[[${target}|${sel}]]`:null;})()
+      : `[${sel}](${String(link).trim()})`;
+    if(!out) return false;
+    ta.setRangeText(out,a,b,"end");
+    ta.setSelectionRange(a+out.length,a+out.length);
+    return true;
+  };
+  const toggleBoldSmart=ta=>{
+    const v=ta.value??""; let a=ta.selectionStart??0,b=ta.selectionEnd??0; if(b<a){const t=a;a=b;b=t}
+    const isStar=i=>v[i]==="*";
+    const hasPair=(L,R)=>L>=0&&R<=v.length&&v.slice(L,L+2)==="**"&&v.slice(R-2,R)==="**";
+    const unwrap=(L,R)=>{ta.value=v.slice(0,L)+v.slice(L+2,R-2)+v.slice(R); ta.setSelectionRange(Math.max(L,a-2),Math.max(L,b-2))};
+    const wrap2=(L,R)=>{ta.value=v.slice(0,L)+"**"+v.slice(L,R)+"**"+v.slice(R); ta.setSelectionRange(L===R?L+2:R+2,L===R?L+2:R+2)};
+    if(a!==b){
+      if(a>=2&&b+2<=v.length&&v.slice(a-2,a)==="**"&&v.slice(b,b+2)==="**"&&!isStar(a-3)&&!isStar(b+2)) return unwrap(a-2,b+2);
+      if(hasPair(a,b)&&b-a>=4&&!isStar(a-1)&&!isStar(b)) return unwrap(a,b);
+      return wrap2(a,b);
+    }
+    const left=v.lastIndexOf("**",a);
+    if(left!==-1){
+      const right=v.indexOf("**",a);
+      if(right!==-1&&right>left&&!isStar(left-1)&&!isStar(right+2)){
+        const innerL=left+2, innerR=right;
+        if(a>=innerL&&a<=innerR){
+          ta.value=v.slice(0,left)+v.slice(innerL,innerR)+v.slice(right+2);
+          const pos=a-2; ta.setSelectionRange(pos,pos); return;
+        }
+      }
+    }
+    ta.value=v.slice(0,a)+"****"+v.slice(a); ta.setSelectionRange(a+2,a+2);
+  };
+  const pushScope=()=>{
+    popScope(); if(!Scope) return;
+    hotScope=new Scope(app.keymap);
+    hotScope.register(["Mod"],"B",ev=>{
+      if(!editTA||document.activeElement!==editTA) return;
+      ev?.preventDefault?.(); toggleBoldSmart(editTA);
+    });
+    app.keymap.pushScope(hotScope);
+  };
+
+  const bind=()=>{
+    if(host.dataset.dndBound==="1") return;
+    host.dataset.dndBound="1";
+
+    if(host.dataset.selBlock!=="1"){
+      host.dataset.selBlock="1";
+      host.addEventListener("selectstart",e=>{
+        if(IS_TOUCH && touch?.on){ e.preventDefault(); return false; }
+      },true);
+    }
+
+    let drag=null, dragGroup=null;
+
+    host.addEventListener("dragover",e=>{
+      if(!drag || String(searchQ||"").trim()) return;
+      e.preventDefault(); try{e.dataTransfer.dropEffect="move"}catch{}
+      pending=e; if(raf) return;
+      raf=requestAnimationFrame(()=>{
+        raf=0; const ev=pending; pending=null; if(!ev||!drag) return;
+        cache();
+        const i=idxFromY(ev.clientY); if(i==null) return clearMarker();
+        place(i);
+      });
+    },true);
+
+    host.addEventListener("drop",e=>keep(async()=>{
+      if(!drag || String(searchQ||"").trim()) return;
+      e.preventDefault();
+      if(ins==null) return clearMarker();
+      await moveGroup(ins,(dragGroup&&dragGroup.length)?dragGroup:[drag]);
+      drag=null; dragGroup=null;
+      await render();
+    }),true);
+
+    host.addEventListener("dragleave",e=>{ if(drag&&!host.contains(e.relatedTarget)) clearMarker(); },true);
+
+    host._dvrowBind=row=>{
+      row.addEventListener("dragstart",e=>{
+        if(IS_TOUCH) return;
+        if(String(searchQ||"").trim()) return e.preventDefault();
+        if(String(editingId)===String(row.dataset.id)||e.target?.closest?.("textarea")) return e.preventDefault();
+
+        drag=row.dataset.id;
+        if(selSet.size){
+          if(selSet.has(drag)) dragGroup=listKeys.filter(x=>selSet.has(x))||[drag];
+          else { clearSel(); selSet.add(drag); syncSelUI(); dragGroup=[drag]; }
+        } else dragGroup=[drag];
+
+        row.classList.add("dragging"); cache();
+        e.dataTransfer.effectAllowed="move";
+        try{e.dataTransfer.setData("text/plain",drag)}catch{}
+        document.body.style.overscrollBehavior="none"; host.style.touchAction="none";
+      });
+
+      row.addEventListener("dragend",()=>{
+        if(IS_TOUCH) return;
+        row.classList.remove("dragging"); drag=null; dragGroup=null; clearMarker(); pending=null;
+        raf&&(cancelAnimationFrame(raf),raf=0);
+        document.body.style.overscrollBehavior=""; host.style.touchAction="";
+      });
+    };
+
+    if(IS_TOUCH && host.dataset.touchBound!=="1"){
+      host.dataset.touchBound="1";
+
+      host.addEventListener("pointerdown",(e)=>{
+        if(e.pointerType!=="touch" || String(searchQ||"").trim()) return;
+        const rowEl=e.target?.closest?.(".row");
+        if(!rowEl || rowEl.classList.contains("editing")) return;
+        if(!rowEl.dataset.id?.startsWith("t:")) return;
+        if(e.target?.closest?.("a,button,input,textarea")) return;
+        cancelPress(); touch.pressedRow=rowEl; touch.fired=false;
+        touch.pressT=setTimeout(()=>{ touch.pressedRow&&startTouchDrag(touch.pressedRow,e.clientY); },170);
+      },true);
+
+      host.addEventListener("pointermove",(e)=>{
+        if(e.pointerType!=="touch" || !touch.on) return;
+        e.preventDefault();
+        cache();
+        const i=idxFromY(e.clientY); if(i==null){ clearMarker(); return; }
+        i!==touch.lastI&&(place(i),touch.lastI=i);
+      },{capture:true,passive:false});
+
+      host.addEventListener("pointerup",async(e)=>{
+        if(e.pointerType!=="touch") return;
+        cancelPress(); await stopTouchDrag();
+        touch.fired&&setTimeout(()=>{touch.fired=false;},0);
+      },true);
+
+      host.addEventListener("pointercancel",async(e)=>{
+        if(e.pointerType!=="touch") return;
+        cancelPress(); await stopTouchDrag();
+        setTimeout(()=>{touch.fired=false;},0);
+      },true);
+
+      host.addEventListener("pointerleave",(e)=>{ e.pointerType==="touch"&&cancelPress(); },true);
+    }
+  };
+
+  const isWork=()=>F===F_WORK;
+  const switchFolder=async()=>{
+    F=isWork()?F_PERSONAL:F_WORK;
+    searchQ=""; clearSel(); refreshPages();
+    await loadForDate(dSel); renderCal();
+  };
+
+  const render=async()=>{
+    clearOutside(); popScope();
+    const items=await read();
+
+    host.innerHTML=""; listEls=[]; listKeys=[]; rects=null; ins=null; rowById=new Map();
+
+    const tb=document.createElement("div"); tb.className="toolbar";
+    const r1=document.createElement("div"); r1.className="toolrow";
+
+    const folderBtn=document.createElement("button");
+    folderBtn.className="tbtn "+(isWork()?"mode-work":"mode-personal");
+    folderBtn.type="button"; folderBtn.textContent=isWork()?"업무":"개인";
+    folderBtn.onclick=()=>keep(switchFolder);
+
+    const srcBtn=document.createElement("button");
+    srcBtn.className="tbtn"; srcBtn.type="button";
+    srcBtn.textContent="Source"; srcBtn.disabled=!path;
+    srcBtn.onclick=openSource;
+
+    hideBtn=document.createElement("button");
+    hideBtn.className="tbtn"; hideBtn.type="button";
+    hideBtn.textContent=hideChecked?"Show":"Hide";
+    hideBtn.onclick=()=>{hideChecked=!hideChecked; clearSel(); applyFilter();};
+
+    const selBtn=document.createElement("button");
+    selBtn.className="tbtn"; selBtn.type="button";
+    selBtn.textContent=selectMode?"Done":"Select";
+    selBtn.onclick=()=>{
+      selectMode=!selectMode;
+      selBtn.textContent=selectMode?"Done":"Select";
+      !selectMode&&clearSel();
+    };
+
+    const dateWrap=document.createElement("div");
+    dateWrap.className="datewrap";
+
+    const dateBtn=document.createElement("button");
+    dateBtn.className="tbtn";
+    dateBtn.type="button";
+    dateBtn.textContent="Date";
+    dateBtn.disabled=!file;
+
+    const pop=document.createElement("div");
+    pop.className="datepop";
+
+    let pY=dSel.getFullYear(), pM=dSel.getMonth();
+    const isOpen=()=>pop.classList.contains("show");
+
+    const close=()=>{
+      pop.classList.remove("show");
+      dateOutside&&(document.removeEventListener("pointerdown",dateOutside,true),dateOutside=null);
+      dateEsc&&(document.removeEventListener("keydown",dateEsc,true),dateEsc=null);
+    };
+
+    const paint=()=>{
+      const first=new Date(pY,pM,1), start=(first.getDay()+6)%7, days=new Date(pY,pM+1,0).getDate();
+      pop.innerHTML="";
+
+      const head=document.createElement("div");
+      head.style.display="flex";
+      head.style.gap="6px";
+      head.style.alignItems="center";
+      head.style.justifyContent="space-between";
+
+      const leftBox=document.createElement("div");
+      leftBox.style.display="flex";
+      leftBox.style.gap="6px";
+      leftBox.style.alignItems="center";
+
+      const prev=document.createElement("button");
+      prev.className="tbtn"; prev.type="button"; prev.textContent="‹";
+      prev.onclick=e=>{e.stopPropagation(); pM--; if(pM<0){pM=11;pY--} paint();};
+
+      const next=document.createElement("button");
+      next.className="tbtn"; next.type="button"; next.textContent="›";
+      next.onclick=e=>{e.stopPropagation(); pM++; if(pM>11){pM=0;pY++} paint();};
+
+      const lab=document.createElement("div");
+      lab.className="datehint"; lab.textContent=`${pY} ${mn[pM]}`;
+
+      leftBox.append(prev,lab,next);
+
+      const closeBtn=document.createElement("button");
+      closeBtn.className="tbtn"; closeBtn.type="button"; closeBtn.textContent="Close";
+      closeBtn.onclick=e=>{e.stopPropagation(); close();};
+
+      head.append(leftBox,closeBtn);
+
+      const w=document.createElement("div");
+      w.style.display="grid"; w.style.gridTemplateColumns="repeat(7,1fr)";
+      w.style.gap="4px"; w.style.marginTop="8px";
+
+      wk.forEach((x,i)=>{
+        const d=document.createElement("div");
+        d.textContent=x;
+        d.style.fontSize="10.5px";
+        d.style.opacity=".7";
+        d.style.textAlign="center";
+        d.style.fontWeight="800";
+        if(i>=5){ d.style.color="var(--dv-blue-ink)"; d.style.opacity=".95"; }
+        w.append(d);
+      });
+
+      const g=document.createElement("div");
+      g.style.display="grid"; g.style.gridTemplateColumns="repeat(7,1fr)";
+      g.style.gap="4px"; g.style.marginTop="6px";
+
+      for(let i=0;i<start;i++){
+        const s=document.createElement("div");
+        s.style.height="28px";
+        g.append(s);
+      }
+
+      for(let d=1; d<=days; d++){
+        const dt=new Date(pY,pM,d); dt.setHours(0,0,0,0);
+        const b=document.createElement("button");
+        b.className="dvcal-d";
+        b.type="button";
+        b.textContent=String(d);
+
+        const col=(start+(d-1))%7;
+        if(col>=5) b.classList.add("wknd");
+        if(+dt===+dSel) b.classList.add("sel");
+
+        b.onclick=e=>{
+          e.stopPropagation();
+          close();
+          keep(()=>moveTasksToDate(ymd(dt)));
+        };
+        g.append(b);
+      }
+
+      pop.append(head,w,g);
+    };
+
+    const open=()=>{
+      if(!file) return;
+      pop.classList.add("show");
+      paint();
+
+      if(!dateOutside){
+        dateOutside=e=>{
+          if(dateWrap.contains(e.target) || pop.contains(e.target)) return;
+          close();
+        };
+        document.addEventListener("pointerdown",dateOutside,true);
+      }
+
+      if(!dateEsc){
+        dateEsc=e=>{ e.key==="Escape" && close(); };
+        document.addEventListener("keydown",dateEsc,true);
+      }
+    };
+
+    dateBtn.onclick=e=>{
+      e?.stopPropagation?.();
+      if(!file) return;
+      if(isOpen()) close();
+      else { pY=dSel.getFullYear(); pM=dSel.getMonth(); open(); }
+    };
+
+    pop.addEventListener("pointerdown",e=>e.stopPropagation(),true);
+
+    dateWrap.append(dateBtn,pop);
+
+    const addTopBtn=document.createElement("button");
+    addTopBtn.className="tbtn"; addTopBtn.type="button";
+    addTopBtn.textContent="+"; addTopBtn.disabled=!file;
+    addTopBtn.onclick=()=>keep(async()=>{await addTop(); await render();});
+
+    infoEl=document.createElement("div"); infoEl.className="tinfo"; infoEl.textContent="";
+    r1.append(folderBtn,srcBtn,hideBtn,selBtn,dateWrap,addTopBtn,infoEl);
+    tb.append(r1);
+
+    const sw=document.createElement("div"); sw.className="searchwrap";
+    const ic=document.createElement("div"); ic.className="searchicon"; ic.textContent="🔍";
+    searchInput=document.createElement("input");
+    searchInput.className="searchin"; searchInput.type="text";
+    searchInput.placeholder="검색"; searchInput.value=searchQ;
+    searchInput.addEventListener("input",()=>{searchQ=searchInput.value||""; clearSel(); applyFilter();});
+    sw.append(ic,searchInput); tb.append(sw);
+    host.append(tb);
+
+    for(const t of items){
+      const id=t.id, isEdit=(id===editingId), tint=await getTint2(t.k,t.txt);
+      const row=document.createElement("div");
+      row.className="row"+(t.chk?" done":"")+(isEdit?" editing":"")+(tint==="y"?" ty":tint==="g"?" tg":"");
+      row.draggable=!isEdit && !IS_TOUCH && !String(searchQ||"").trim();
+      row.dataset.id=id; row.dataset.k=t.k; row.dataset.txt=t.txt??""; row.dataset.chk=t.chk?"1":"0";
+      row.classList.toggle("picked", selSet.has(id));
+
+      const cb=document.createElement("input");
+      cb.className="cb"; cb.type="checkbox"; cb.checked=t.chk;
+      cb.onchange=()=>keep(()=>{
+        row.classList.toggle("done",cb.checked);
+        row.dataset.chk=cb.checked?"1":"0";
+        applyFilter();
+        return setChk(t.i,cb.checked);
+      });
+
+      const txt=document.createElement("div"); txt.className="txt";
+      const btns=document.createElement("div"); btns.className="btns";
+
+      const mkChip=(cls,title)=>{const b=document.createElement("button");b.className=`chip ${cls}`;b.type="button";b.title=title;return b;};
+      const yChip=mkChip("y"+(tint==="y"?" on":""),"Light yellow");
+      const gChip=mkChip("g"+(tint==="g"?" on":""),"Light green");
+
+      const applyTintUI=next=>{
+        row.classList.toggle("ty",next==="y");
+        row.classList.toggle("tg",next==="g");
+        yChip.classList.toggle("on",next==="y");
+        gChip.classList.toggle("on",next==="g");
+        applyFilter();
+      };
+
+      yChip.onclick=e=>keep(async()=>{
+        e?.stopPropagation?.();
+        const cur=await getTint2(t.k,t.txt), next=(cur==="y")?"":"y";
+        await setTint2(t.k,next,t.txt); applyTintUI(next);
+      });
+      gChip.onclick=e=>keep(async()=>{
+        e?.stopPropagation?.();
+        const cur=await getTint2(t.k,t.txt), next=(cur==="g")?"":"g";
+        await setTint2(t.k,next,t.txt); applyTintUI(next);
+      });
+
+      const copyBtn=document.createElement("button");
+      copyBtn.className="b"; copyBtn.type="button"; copyBtn.textContent="c";
+      copyBtn.onclick=()=>keep(async()=>{
+        if(editingId===id) return;
+        const curTint=await getTint2(t.k,t.txt);
+        await dup(t.i);
+        if(curTint){
+          const newKey=tKey(path,header,t.txt??"", (t.occ||1)+1);
+          await setTint2(newKey,curTint,t.txt);
+        }
+        await render();
+      });
+
+      const delBtn=document.createElement("button");
+      delBtn.className="b"; delBtn.type="button"; delBtn.textContent="X";
+      delBtn.onclick=()=>keep(async()=>{
+        if(editingId===id){editingId=null;editTA=null;popScope();}
+        await setTint2(t.k,"",t.txt);
+        await del(t.i);
+        selSet.delete(id);
+        await render();
+      });
+
+      btns.append(yChip,gChip,copyBtn,delBtn);
+
+      if(isEdit){
+        const oldKey=t.k, oldTxt=t.txt??"", oldTint=await getTint2(oldKey,oldTxt);
+        const ta=document.createElement("textarea"); ta.value=t.txt??"";
+        txt.appendChild(ta); editTA=ta;
+
+        ta.addEventListener("dragstart",ev=>ev.stopPropagation(),true);
+        ta.addEventListener("paste",(ev)=>{
+          const cd=ev.clipboardData||window.clipboardData;
+          const link=String((cd&&cd.getData)?cd.getData("text/plain"):"").trim();
+          if(!link) return;
+          if(isUrlLike(link)){ if(smartPasteLink(ta,link,"url")){ev.preventDefault();ev.stopPropagation();} return; }
+          if(isWikiLink(link)){ if(smartPasteLink(ta,link,"wiki")){ev.preventDefault();ev.stopPropagation();} return; }
+        },true);
+
+        const save=()=>keep(async()=>{
+          editTA=null; popScope();
+          const newTxt=ta.value;
+          await setTxt(t.i,newTxt);
+          const newKey=tKey(path,header,newTxt,t.occ);
+          await moveTintKey(oldKey,newKey);
+          oldTint?await setTint2(newKey,oldTint,newTxt):await setTint2(newKey,"",newTxt);
+          editingId=null;
+          await render();
+        });
+
+        ta.addEventListener("keydown",ev=>{
+          const meta=ev.metaKey||ev.ctrlKey;
+          if(ev.key==="Escape"){ev.preventDefault(); editTA=null; popScope(); editingId=null; render(); return;}
+          if((meta&&ev.key==="Enter")||(ev.key==="Enter"&&!ev.shiftKey)){ev.preventDefault(); save();}
+        },true);
+
+        outsideHandler=ev=>{ if(ta.contains(ev.target)||row.contains(ev.target)) return; save(); };
+        document.addEventListener("pointerdown",outsideHandler,true);
+
+        pushScope(); requestAnimationFrame(()=>ta.focus());
+      } else {
+        const body=document.createElement("span");
+        txt.appendChild(body);
+        await renderMd(t.txt??"",body);
+        bindLinkOpen(body);
+
+        txt.onclick=e=>{
+          if(touch.fired) return;
+          if(e.target?.closest?.("a,button,input,textarea")) return;
+
+          if(selectMode){
+            selSet.has(id)?selSet.delete(id):selSet.add(id);
+            syncSelUI();
+            return;
+          }
+
+          if(isMod(e)){
+            selSet.has(id)?selSet.delete(id):selSet.add(id);
+            syncSelUI();
+            return;
+          }
+
+          clearSel();
+          editingId=id; keep(render);
+        };
+      }
+
+      row.append(cb,txt,btns);
+      host.append(row);
+
+      listEls.push(row);
+      listKeys.push(id);
+      rowById.set(id,row);
+    }
+
+    bind();
+    listEls.forEach(r=>host._dvrowBind?.(r));
+    applyFilter();
+    syncSelUI();
+    searchInput && document.activeElement===searchInput && requestAnimationFrame(()=>searchInput?.focus());
+  };
+
+  const loadForDate=async(dt)=>{
+    clearOutside(); editingId=null; editTA=null; popScope(); clearSel(); cancelPress();
+    dSel=new Date(dt); dSel.setHours(0,0,0,0);
+    header=`# ${dn[dSel.getDay()]} ${md(dSel)}`;
+    const key=ymd(dSel), p=pickWeekNote(key);
+    if(!p){file=null; path=""; host.innerHTML=`<div class="dvnow-loading">No week note for ${key}</div>`; return;}
+    path=p; file=app.vault.getAbstractFileByPath(path);
+    if(!file){host.innerHTML='<div class="dvnow-loading">File not found</div>'; return;}
+    host.innerHTML='<div class="dvnow-loading">Loading…</div>';
+    await loadTintDB();
+    await render();
+  };
+
+  refreshPages();
+  const today=new Date(); today.setHours(0,0,0,0);
+  let viewY=Y, viewM=(today.getFullYear()===Y?today.getMonth():0);
+
+  const renderCal=()=>{
+    title.textContent=`${viewY} ${mn[viewM]}`;
+    grid.innerHTML="";
+    const first=new Date(viewY,viewM,1), start=(first.getDay()+6)%7, days=new Date(viewY,viewM+1,0).getDate();
+    const mkOff=()=>{const b=document.createElement("button"); b.className="dvcal-d off"; b.type="button"; b.tabIndex=-1; return b;};
+
+    for(let i=0;i<7;i++) weekRow.children[i].classList.toggle("wknd", i>=5);
+    for(let i=0;i<start;i++) grid.appendChild(mkOff());
+
+    for(let d=1; d<=days; d++){
+      const dt=new Date(viewY,viewM,d); dt.setHours(0,0,0,0);
+      const b=document.createElement("button");
+      b.className="dvcal-d"; b.type="button"; b.textContent=String(d);
+      const col=(start + (d-1))%7;
+      col>=5&&b.classList.add("wknd");
+      +dt===+today&&b.classList.add("today");
+      +dt===+dSel&&b.classList.add("sel");
+      b.onclick=()=>keep(async()=>{await loadForDate(dt); renderCal();});
+      grid.appendChild(b);
+    }
+    for(let i=(7-(grid.children.length%7))%7;i>0;i--) grid.appendChild(mkOff());
+  };
+
+  cal.addEventListener("click",e=>{
+    const nav=e.target?.closest?.(".dvcal-b")?.dataset?.nav; if(!nav) return;
+    viewM+=+nav;
+    viewM<0&&(viewM=11,viewY--);
+    viewM>11&&(viewM=0,viewY++);
+    if(viewY!==Y){viewY=Y; viewM=Math.max(0,Math.min(11,viewM))}
+    renderCal();
+  });
+
+  todayBtn.onclick=()=>keep(async()=>{viewY=Y; viewM=today.getMonth(); await loadForDate(today); renderCal();});
+  reloadBtn.onclick=()=>keep(async()=>{refreshPages(); await loadTintDB(); await loadForDate(dSel); renderCal();});
+
+  await loadForDate(today);
+  renderCal();
+})();
